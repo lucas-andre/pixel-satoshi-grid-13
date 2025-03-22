@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Pixel, PixelSelection, GridMode, PixelCoordinate } from '@/types';
 import { fetchPixels } from '@/utils/api';
@@ -18,6 +19,8 @@ interface PixelContextProps {
   selectedColor: string;
   selectionDimensions: { width: number; height: number } | null;
   pixelContent: { pixelIds: string[]; content: string } | null;
+  isSelectionLocked: boolean;
+  selectionOffset: { x: number; y: number } | null;
   setSelectedColor: (color: string) => void;
   setGridMode: (mode: GridMode) => void;
   startSelection: (x: number, y: number) => void;
@@ -36,6 +39,10 @@ interface PixelContextProps {
   refreshPixels: () => void;
   savePixelContent: (pixelIds: string[], content: string) => void;
   getPixelContent: (x: number, y: number) => string | null;
+  toggleSelectionLock: () => void;
+  startMovingSelection: (x: number, y: number) => void;
+  moveSelection: (x: number, y: number) => void;
+  finalizeSelectionMove: () => void;
 }
 
 const PixelContext = createContext<PixelContextProps | undefined>(undefined);
@@ -59,6 +66,9 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
   const [selectedColor, setSelectedColor] = useState('#F7931A'); // Bitcoin orange
   const [pixelContent, setPixelContent] = useState<{ pixelIds: string[]; content: string } | null>(null);
+  // New state for locking selections
+  const [isSelectionLocked, setIsSelectionLocked] = useState(false);
+  const [selectionOffset, setSelectionOffset] = useState<{ x: number; y: number } | null>(null);
 
   // Calculate the dimensions of the selection or selected pixels
   const selectionDimensions = useCallback(() => {
@@ -113,7 +123,7 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [refreshPixels]);
 
   const startSelection = useCallback((x: number, y: number) => {
-    if (gridMode === 'select') {
+    if (gridMode === 'select' && !isSelectionLocked) {
       setSelection({
         startX: x,
         startY: y,
@@ -121,20 +131,20 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         endY: y,
       });
     }
-  }, [gridMode]);
+  }, [gridMode, isSelectionLocked]);
 
   const updateSelection = useCallback((x: number, y: number) => {
-    if (selection && gridMode === 'select') {
+    if (selection && gridMode === 'select' && !isSelectionLocked) {
       setSelection({
         ...selection,
         endX: x,
         endY: y,
       });
     }
-  }, [selection, gridMode]);
+  }, [selection, gridMode, isSelectionLocked]);
 
   const completeSelection = useCallback(() => {
-    if (selection && gridMode === 'select') {
+    if (selection && gridMode === 'select' && !isSelectionLocked) {
       const startX = Math.min(selection.startX, selection.endX);
       const endX = Math.max(selection.startX, selection.endX);
       const startY = Math.min(selection.startY, selection.endY);
@@ -154,24 +164,28 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setSelectedPixels(newSelectedPixels);
       setSelection(null);
     }
-  }, [selection, gridMode]);
+  }, [selection, gridMode, isSelectionLocked]);
 
   const clearSelection = useCallback(() => {
     setSelectedPixels([]);
     setSelection(null);
+    setIsSelectionLocked(false);
+    setSelectionOffset(null);
   }, []);
 
   const addSelectedPixel = useCallback((x: number, y: number) => {
-    if (!isPixelOwned(x, y) && !isPixelSelected(x, y)) {
+    if (!isPixelOwned(x, y) && !isPixelSelected(x, y) && !isSelectionLocked) {
       setSelectedPixels(prev => [...prev, { x, y }]);
     }
-  }, []);
+  }, [isSelectionLocked]);
 
   const removeSelectedPixel = useCallback((x: number, y: number) => {
-    setSelectedPixels(prev => 
-      prev.filter(pixel => !(pixel.x === x && pixel.y === y))
-    );
-  }, []);
+    if (!isSelectionLocked) {
+      setSelectedPixels(prev => 
+        prev.filter(pixel => !(pixel.x === x && pixel.y === y))
+      );
+    }
+  }, [isSelectionLocked]);
 
   const isPixelSelected = useCallback((x: number, y: number) => {
     return selectedPixels.some(pixel => pixel.x === x && pixel.y === y);
@@ -235,6 +249,85 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }));
   }, []);
 
+  // Toggle lock for selected pixels
+  const toggleSelectionLock = useCallback(() => {
+    if (selectedPixels.length > 0) {
+      setIsSelectionLocked(prev => !prev);
+      // Reset selection offset when unlocking
+      if (isSelectionLocked) {
+        setSelectionOffset(null);
+      }
+    }
+  }, [selectedPixels, isSelectionLocked]);
+
+  // Start moving locked selection
+  const startMovingSelection = useCallback((x: number, y: number) => {
+    if (isSelectionLocked && selectedPixels.length > 0) {
+      const dims = selectionDimensions();
+      if (dims) {
+        // Calculate the center of the selection for offset
+        const xCoords = selectedPixels.map(p => p.x);
+        const yCoords = selectedPixels.map(p => p.y);
+        const minX = Math.min(...xCoords);
+        const minY = Math.min(...yCoords);
+        
+        // Store the offset from click position to selection corner
+        setSelectionOffset({ 
+          x: x - minX, 
+          y: y - minY 
+        });
+      }
+    }
+  }, [isSelectionLocked, selectedPixels, selectionDimensions]);
+
+  // Move the locked selection
+  const moveSelection = useCallback((x: number, y: number) => {
+    if (isSelectionLocked && selectionOffset && selectedPixels.length > 0) {
+      // Calculate new top-left position based on mouse position and offset
+      const newMinX = x - selectionOffset.x;
+      const newMinY = y - selectionOffset.y;
+      
+      // Find current bounds
+      const xCoords = selectedPixels.map(p => p.x);
+      const yCoords = selectedPixels.map(p => p.y);
+      const minX = Math.min(...xCoords);
+      const minY = Math.min(...yCoords);
+      const width = Math.max(...xCoords) - minX + 1;
+      const height = Math.max(...yCoords) - minY + 1;
+      
+      // Calculate the shift needed
+      const shiftX = newMinX - minX;
+      const shiftY = newMinY - minY;
+      
+      // Check if new position would overlap with owned pixels
+      let canMove = true;
+      for (let x = newMinX; x < newMinX + width; x++) {
+        for (let y = newMinY; y < newMinY + height; y++) {
+          if (isPixelOwned(x, y)) {
+            canMove = false;
+            break;
+          }
+        }
+        if (!canMove) break;
+      }
+      
+      if (canMove) {
+        // Move all selected pixels by the calculated shift
+        setSelectedPixels(prevSelected => prevSelected.map(pixel => ({
+          x: pixel.x + shiftX,
+          y: pixel.y + shiftY
+        })));
+      }
+    }
+  }, [isSelectionLocked, selectionOffset, selectedPixels, isPixelOwned]);
+
+  // Finalize the selection move
+  const finalizeSelectionMove = useCallback(() => {
+    if (isSelectionLocked && selectionOffset) {
+      setSelectionOffset(null);
+    }
+  }, [isSelectionLocked, selectionOffset]);
+
   const value = {
     pixels,
     selectedPixels,
@@ -247,6 +340,8 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     selectedColor,
     selectionDimensions: selectionDimensions(),
     pixelContent,
+    isSelectionLocked,
+    selectionOffset,
     setSelectedColor,
     setGridMode,
     startSelection,
@@ -265,6 +360,10 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     refreshPixels,
     savePixelContent,
     getPixelContent,
+    toggleSelectionLock,
+    startMovingSelection,
+    moveSelection,
+    finalizeSelectionMove,
   };
 
   return <PixelContext.Provider value={value}>{children}</PixelContext.Provider>;

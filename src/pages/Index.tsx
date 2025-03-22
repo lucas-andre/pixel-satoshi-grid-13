@@ -20,6 +20,12 @@ const PixelGridApp: React.FC = () => {
   const [text, setText] = useState('');
   const [image, setImage] = useState<string | undefined>(undefined);
 
+  // New function to handle Buy Pixels button click
+  const handleBuyPixels = () => {
+    setGridMode('select');
+    toast.info("Select an area on the canvas");
+  };
+
   const handlePurchase = () => {
     setShowPurchaseModal(true);
   };
@@ -53,7 +59,7 @@ const PixelGridApp: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col">
-      <Navbar />
+      <Navbar onBuyPixels={handleBuyPixels} />
       
       <main className="flex-1 pt-16 flex">
         <div className="flex-1 relative">
@@ -71,6 +77,19 @@ const PixelGridApp: React.FC = () => {
           {gridMode === 'view' && (
             <div className="absolute top-4 left-4 w-80 z-10">
               <Leaderboard />
+            </div>
+          )}
+          
+          {/* Buy Pixels floating button in view mode */}
+          {gridMode === 'view' && (
+            <div className="absolute bottom-16 right-4">
+              <button
+                onClick={handleBuyPixels}
+                className="bg-bitcoin hover:bg-bitcoin-light text-white font-medium rounded-full p-4 shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
+              >
+                <Bitcoin className="h-5 w-5" />
+                <span>Buy Pixels</span>
+              </button>
             </div>
           )}
         </div>

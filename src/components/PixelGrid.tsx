@@ -27,11 +27,16 @@ const PixelGrid: React.FC = () => {
     zoomOut,
     resetView,
     panGrid,
+    isSelectionLocked,
+    startMovingSelection,
+    moveSelection,
+    finalizeSelectionMove,
   } = usePixels();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPanning, setIsPanning] = useState(false);
+  const [isMovingSelection, setIsMovingSelection] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [clickedPixel, setClickedPixel] = useState<{ x: number, y: number } | null>(null);
   const [pixelDetailsOpen, setPixelDetailsOpen] = useState(false);
@@ -116,7 +121,7 @@ const PixelGrid: React.FC = () => {
     selectedPixels.forEach(({ x, y }) => {
       if (x >= visibleStartX && x < visibleEndX && 
           y >= visibleStartY && y < visibleEndY) {
-        ctx.fillStyle = 'rgba(247, 147, 26, 0.5)';
+        ctx.fillStyle = isSelectionLocked ? 'rgba(59, 130, 246, 0.5)' : 'rgba(247, 147, 26, 0.5)';
         ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
       }
     });
@@ -144,6 +149,27 @@ const PixelGrid: React.FC = () => {
         (endX - startX + 1) * gridSize, 
         (endY - startY + 1) * gridSize
       );
+    }
+
+    // Draw border around locked selection
+    if (isSelectionLocked && selectedPixels.length > 0 && !selection) {
+      const xCoords = selectedPixels.map(p => p.x);
+      const yCoords = selectedPixels.map(p => p.y);
+      const minX = Math.min(...xCoords);
+      const maxX = Math.max(...xCoords);
+      const minY = Math.min(...yCoords);
+      const maxY = Math.max(...yCoords);
+      
+      ctx.strokeStyle = 'rgb(59, 130, 246)'; // Blue for locked selection
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([2, 2]);
+      ctx.strokeRect(
+        minX * gridSize, 
+        minY * gridSize, 
+        (maxX - minX + 1) * gridSize, 
+        (maxY - minY + 1) * gridSize
+      );
+      ctx.setLineDash([]);
     }
 
     // Draw grid lines
@@ -188,7 +214,7 @@ const PixelGrid: React.FC = () => {
 
   useEffect(() => {
     drawGrid();
-  }, [pixels, selectedPixels, selection, viewTransform, gridMode, selectionDimensions]);
+  }, [pixels, selectedPixels, selection, viewTransform, gridMode, selectionDimensions, isSelectionLocked]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
@@ -202,7 +228,11 @@ const PixelGrid: React.FC = () => {
       if (isPixelOwned(x, y)) {
         setClickedPixel({ x, y });
         setPixelDetailsOpen(true);
-      } else {
+      } else if (isSelectionLocked && isPixelSelected(x, y)) {
+        // Start moving the locked selection
+        setIsMovingSelection(true);
+        startMovingSelection(x, y);
+      } else if (!isSelectionLocked) {
         startSelection(x, y);
       }
     }
@@ -214,9 +244,12 @@ const PixelGrid: React.FC = () => {
       const deltaY = e.clientY - lastMousePos.y;
       panGrid(deltaX, deltaY);
       setLastMousePos({ x: e.clientX, y: e.clientY });
-    } else if (selection && gridMode === 'select') {
+    } else if (selection && gridMode === 'select' && !isSelectionLocked) {
       const { x, y } = screenToGrid(e.clientX, e.clientY);
       updateSelection(x, y);
+    } else if (isMovingSelection && isSelectionLocked && gridMode === 'select') {
+      const { x, y } = screenToGrid(e.clientX, e.clientY);
+      moveSelection(x, y);
     }
   };
 
@@ -225,6 +258,9 @@ const PixelGrid: React.FC = () => {
       setIsPanning(false);
     } else if (selection) {
       completeSelection();
+    } else if (isMovingSelection) {
+      setIsMovingSelection(false);
+      finalizeSelectionMove();
     }
   };
 
@@ -252,7 +288,12 @@ const PixelGrid: React.FC = () => {
       
       <canvas
         ref={canvasRef}
-        className={`w-full h-full ${isPanning ? 'cursor-grabbing' : gridMode === 'view' ? 'cursor-grab' : 'cursor-crosshair'}`}
+        className={`w-full h-full ${
+          isPanning ? 'cursor-grabbing' : 
+          isSelectionLocked && selectedPixels.length > 0 ? 'cursor-move' : 
+          gridMode === 'view' ? 'cursor-grab' : 
+          'cursor-crosshair'
+        }`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -312,6 +353,12 @@ const PixelGrid: React.FC = () => {
           {selectionDimensions && (
             <p className="text-xs text-muted-foreground mt-1">
               Dimensions: {selectionDimensions.width} × {selectionDimensions.height} pixels
+            </p>
+          )}
+          {isSelectionLocked && (
+            <p className="text-xs text-blue-600 mt-1 flex items-center">
+              <Grab className="h-3 w-3 mr-1" />
+              Drag selection to move it
             </p>
           )}
         </div>

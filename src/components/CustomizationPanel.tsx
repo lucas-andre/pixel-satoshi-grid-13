@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PaintBucket, Type, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { PaintBucket, Type, Image as ImageIcon, Upload, X, Lock, Unlock, Move } from 'lucide-react';
 import { usePixels } from '@/context/PixelContext';
 import { CustomizationType } from '@/types';
 
@@ -17,7 +17,14 @@ const CustomizationPanel: React.FC<CustomizationPanelProps> = ({
   onPurchase,
   onCancel
 }) => {
-  const { selectedPixels, selectedColor, setSelectedColor } = usePixels();
+  const { 
+    selectedPixels, 
+    selectedColor, 
+    setSelectedColor, 
+    isSelectionLocked, 
+    toggleSelectionLock, 
+    selectionDimensions 
+  } = usePixels();
   const [activeTab, setActiveTab] = useState<CustomizationType>('color');
   const [text, setText] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -64,7 +71,55 @@ const CustomizationPanel: React.FC<CustomizationPanelProps> = ({
         <p className="text-sm text-muted-foreground">
           {selectedPixels.length} pixels selected ({selectedPixels.length} sats)
         </p>
+        {selectionDimensions && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Dimensions: {selectionDimensions.width} × {selectionDimensions.height} pixels
+          </p>
+        )}
       </div>
+      
+      <div className="flex justify-between items-center mb-4 bg-muted/40 rounded-md p-2">
+        <div className="text-sm font-medium flex items-center">
+          {isSelectionLocked ? (
+            <div className="flex items-center text-blue-600">
+              <Lock className="h-4 w-4 mr-1" />
+              <span>Selection Locked</span>
+            </div>
+          ) : (
+            <div className="flex items-center text-amber-600">
+              <Unlock className="h-4 w-4 mr-1" />
+              <span>Selection Unlocked</span>
+            </div>
+          )}
+        </div>
+        <Button 
+          size="sm" 
+          variant={isSelectionLocked ? "outline" : "secondary"}
+          onClick={toggleSelectionLock}
+          className="text-xs"
+        >
+          {isSelectionLocked ? (
+            <>
+              <Unlock className="h-3.5 w-3.5 mr-1" />
+              Unlock
+            </>
+          ) : (
+            <>
+              <Lock className="h-3.5 w-3.5 mr-1" />
+              Lock
+            </>
+          )}
+        </Button>
+      </div>
+      
+      {isSelectionLocked && (
+        <div className="mb-4 bg-blue-50 p-2 rounded-md">
+          <div className="flex items-center text-blue-700 text-sm">
+            <Move className="h-4 w-4 mr-2" />
+            <span>You can now drag the selection to move it</span>
+          </div>
+        </div>
+      )}
       
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as CustomizationType)}>
         <TabsList className="grid w-full grid-cols-3 mb-4">
@@ -227,18 +282,12 @@ const CustomizationPanel: React.FC<CustomizationPanelProps> = ({
         </Button>
         <Button 
           className="bg-bitcoin hover:bg-bitcoin-light text-white"
-          disabled={selectedPixels.length < 1000 || !nickname}
+          disabled={selectedPixels.length === 0 || !nickname}
           onClick={onPurchase}
         >
           Purchase ({selectedPixels.length} sats)
         </Button>
       </div>
-      
-      {selectedPixels.length < 1000 && (
-        <p className="text-sm text-destructive mt-2">
-          Minimum purchase is 1000 pixels (1000 sats)
-        </p>
-      )}
     </div>
   );
 };
