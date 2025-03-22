@@ -17,6 +17,7 @@ interface PixelContextProps {
   totalPixelCount: number;
   purchasedPixelCount: number;
   selectedColor: string;
+  selectionDimensions: { width: number; height: number } | null;
   setSelectedColor: (color: string) => void;
   setGridMode: (mode: GridMode) => void;
   startSelection: (x: number, y: number) => void;
@@ -55,6 +56,28 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     translateY: 0,
   });
   const [selectedColor, setSelectedColor] = useState('#F7931A'); // Bitcoin orange
+
+  // Calculate the dimensions of the selection or selected pixels
+  const selectionDimensions = useCallback(() => {
+    if (selection) {
+      const width = Math.abs(selection.endX - selection.startX) + 1;
+      const height = Math.abs(selection.endY - selection.startY) + 1;
+      return { width, height };
+    } else if (selectedPixels.length > 0) {
+      // Find min and max x,y coordinates
+      const xCoords = selectedPixels.map(p => p.x);
+      const yCoords = selectedPixels.map(p => p.y);
+      const minX = Math.min(...xCoords);
+      const maxX = Math.max(...xCoords);
+      const minY = Math.min(...yCoords);
+      const maxY = Math.max(...yCoords);
+      return { 
+        width: maxX - minX + 1,
+        height: maxY - minY + 1
+      };
+    }
+    return null;
+  }, [selection, selectedPixels]);
 
   // Mock data for initial development
   const purchasedPixelCount = pixels.length;
@@ -200,6 +223,7 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     totalPixelCount: TOTAL_PIXEL_COUNT,
     purchasedPixelCount,
     selectedColor,
+    selectionDimensions: selectionDimensions(),
     setSelectedColor,
     setGridMode,
     startSelection,

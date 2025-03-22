@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw, Grab, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +13,7 @@ const PixelGrid: React.FC = () => {
     gridMode,
     viewTransform,
     isLoading,
+    selectionDimensions,
     startSelection,
     updateSelection,
     completeSelection,
@@ -34,7 +34,6 @@ const PixelGrid: React.FC = () => {
   const [clickedPixel, setClickedPixel] = useState<{ x: number, y: number } | null>(null);
   const [pixelDetailsOpen, setPixelDetailsOpen] = useState(false);
 
-  // Convert from screen coordinates to grid coordinates
   const screenToGrid = (screenX: number, screenY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -46,7 +45,6 @@ const PixelGrid: React.FC = () => {
     return { x, y };
   };
 
-  // Draw the pixel grid
   const drawGrid = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -54,28 +52,22 @@ const PixelGrid: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Apply transform
     ctx.save();
     ctx.translate(viewTransform.translateX, viewTransform.translateY);
     ctx.scale(viewTransform.scale, viewTransform.scale);
 
-    // Calculate visible grid bounds
     const visibleStartX = Math.max(0, Math.floor(-viewTransform.translateX / (2 * viewTransform.scale)));
     const visibleStartY = Math.max(0, Math.floor(-viewTransform.translateY / (2 * viewTransform.scale)));
     const visibleEndX = Math.min(1000, Math.ceil((canvas.width - viewTransform.translateX) / (2 * viewTransform.scale)));
     const visibleEndY = Math.min(1000, Math.ceil((canvas.height - viewTransform.translateY) / (2 * viewTransform.scale)));
 
-    // Draw grid background
     ctx.fillStyle = '#f8f9fa';
     ctx.fillRect(visibleStartX * 2, visibleStartY * 2, (visibleEndX - visibleStartX) * 2, (visibleEndY - visibleStartY) * 2);
 
-    // Draw visible grid cells
-    const gridSize = 2; // Size of each pixel
-    
-    // Draw owned pixels first
+    const gridSize = 2;
+
     for (const pixel of pixels) {
       if (pixel.x >= visibleStartX && pixel.x < visibleEndX && 
           pixel.y >= visibleStartY && pixel.y < visibleEndY) {
@@ -84,23 +76,21 @@ const PixelGrid: React.FC = () => {
       }
     }
 
-    // Draw selected pixels
     selectedPixels.forEach(({ x, y }) => {
       if (x >= visibleStartX && x < visibleEndX && 
           y >= visibleStartY && y < visibleEndY) {
-        ctx.fillStyle = 'rgba(247, 147, 26, 0.5)'; // Bitcoin orange with transparency
+        ctx.fillStyle = 'rgba(247, 147, 26, 0.5)';
         ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
       }
     });
 
-    // Draw current selection
     if (selection) {
       const startX = Math.min(selection.startX, selection.endX);
       const endX = Math.max(selection.startX, selection.endX);
       const startY = Math.min(selection.startY, selection.endY);
       const endY = Math.max(selection.startY, selection.endY);
       
-      ctx.fillStyle = 'rgba(247, 147, 26, 0.3)'; // Bitcoin orange with more transparency
+      ctx.fillStyle = 'rgba(247, 147, 26, 0.3)';
       ctx.fillRect(
         startX * gridSize, 
         startY * gridSize, 
@@ -118,12 +108,10 @@ const PixelGrid: React.FC = () => {
       );
     }
 
-    // Draw grid lines
     if (viewTransform.scale > 1) {
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.lineWidth = 0.2;
       
-      // Vertical lines
       for (let x = visibleStartX; x <= visibleEndX; x++) {
         ctx.beginPath();
         ctx.moveTo(x * gridSize, visibleStartY * gridSize);
@@ -131,7 +119,6 @@ const PixelGrid: React.FC = () => {
         ctx.stroke();
       }
       
-      // Horizontal lines
       for (let y = visibleStartY; y <= visibleEndY; y++) {
         ctx.beginPath();
         ctx.moveTo(visibleStartX * gridSize, y * gridSize);
@@ -143,7 +130,6 @@ const PixelGrid: React.FC = () => {
     ctx.restore();
   };
 
-  // Handle resize
   useEffect(() => {
     const handleResize = () => {
       if (canvasRef.current && containerRef.current) {
@@ -161,15 +147,13 @@ const PixelGrid: React.FC = () => {
     };
   }, []);
 
-  // Redraw when relevant state changes
   useEffect(() => {
     drawGrid();
-  }, [pixels, selectedPixels, selection, viewTransform, gridMode]);
+  }, [pixels, selectedPixels, selection, viewTransform, gridMode, selectionDimensions]);
 
-  // Mouse event handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return; // Only respond to left mouse button
-    
+    if (e.button !== 0) return;
+
     if (gridMode === 'view') {
       setIsPanning(true);
       setLastMousePos({ x: e.clientX, y: e.clientY });
@@ -177,11 +161,9 @@ const PixelGrid: React.FC = () => {
       const { x, y } = screenToGrid(e.clientX, e.clientY);
       
       if (isPixelOwned(x, y)) {
-        // Show details for owned pixels
         setClickedPixel({ x, y });
         setPixelDetailsOpen(true);
       } else {
-        // Start selection
         startSelection(x, y);
       }
     }
@@ -280,7 +262,7 @@ const PixelGrid: React.FC = () => {
         </TooltipProvider>
       </div>
 
-      {selectedPixels.length > 0 && (
+      {(selectedPixels.length > 0 || selection) && (
         <div className="absolute bottom-4 left-4 glass p-2 rounded-lg shadow-subtle animate-fade-in-up">
           <p className="text-sm font-medium">
             {selectedPixels.length} pixels selected
@@ -288,6 +270,11 @@ const PixelGrid: React.FC = () => {
               {selectedPixels.length} sats
             </span>
           </p>
+          {selectionDimensions && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Dimensions: {selectionDimensions.width} × {selectionDimensions.height} pixels
+            </p>
+          )}
         </div>
       )}
 
