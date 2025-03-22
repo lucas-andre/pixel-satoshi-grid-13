@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Pixel, PixelSelection, GridMode, PixelCoordinate } from '@/types';
 import { fetchPixels } from '@/utils/api';
@@ -18,6 +17,7 @@ interface PixelContextProps {
   purchasedPixelCount: number;
   selectedColor: string;
   selectionDimensions: { width: number; height: number } | null;
+  pixelContent: { pixelIds: string[]; content: string } | null;
   setSelectedColor: (color: string) => void;
   setGridMode: (mode: GridMode) => void;
   startSelection: (x: number, y: number) => void;
@@ -34,6 +34,8 @@ interface PixelContextProps {
   resetView: () => void;
   panGrid: (deltaX: number, deltaY: number) => void;
   refreshPixels: () => void;
+  savePixelContent: (pixelIds: string[], content: string) => void;
+  getPixelContent: (x: number, y: number) => string | null;
 }
 
 const PixelContext = createContext<PixelContextProps | undefined>(undefined);
@@ -56,6 +58,7 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     translateY: 0,
   });
   const [selectedColor, setSelectedColor] = useState('#F7931A'); // Bitcoin orange
+  const [pixelContent, setPixelContent] = useState<{ pixelIds: string[]; content: string } | null>(null);
 
   // Calculate the dimensions of the selection or selected pixels
   const selectionDimensions = useCallback(() => {
@@ -183,6 +186,25 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return pixel ? pixel.color : '';
   }, [pixels]);
 
+  const savePixelContent = useCallback((pixelIds: string[], content: string) => {
+    setPixelContent({ pixelIds, content });
+    
+    // In a real implementation, this would call an API to save the content
+    console.log('Saving pixel content', { pixelIds, content });
+  }, []);
+
+  const getPixelContent = useCallback((x: number, y: number) => {
+    if (!pixelContent) return null;
+    
+    // Find if the pixel belongs to any content
+    const pixelId = `pixel-${x}-${y}`;
+    if (pixelContent.pixelIds.includes(pixelId)) {
+      return pixelContent.content;
+    }
+    
+    return null;
+  }, [pixelContent]);
+
   const zoomIn = useCallback(() => {
     setViewTransform(prev => ({
       ...prev,
@@ -224,6 +246,7 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     purchasedPixelCount,
     selectedColor,
     selectionDimensions: selectionDimensions(),
+    pixelContent,
     setSelectedColor,
     setGridMode,
     startSelection,
@@ -240,6 +263,8 @@ export const PixelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     resetView,
     panGrid,
     refreshPixels,
+    savePixelContent,
+    getPixelContent,
   };
 
   return <PixelContext.Provider value={value}>{children}</PixelContext.Provider>;

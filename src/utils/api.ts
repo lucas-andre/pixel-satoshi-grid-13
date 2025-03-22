@@ -54,6 +54,23 @@ export async function confirmPayment(invoiceId: string): Promise<{
   });
 }
 
+export async function savePixelContent(pixelIds: string[], content: string): Promise<{
+  success: boolean;
+  message?: string;
+}> {
+  console.log('Saving pixel content for pixels:', pixelIds);
+  
+  // For development, simulate successful save
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        success: true,
+        message: 'Pixel content saved successfully'
+      });
+    }, 1000);
+  });
+}
+
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   // Mock leaderboard data
   return new Promise((resolve) => {

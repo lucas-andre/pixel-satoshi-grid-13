@@ -7,6 +7,7 @@ export interface Pixel {
   ownerId: string | null;
   createdAt: string;
   updatedAt: string;
+  content?: string; // Data URL for images or pixel art
 }
 
 export interface PixelOwner {
@@ -32,6 +33,7 @@ export interface PixelPurchase {
   url?: string;
   text?: string;
   image?: string;
+  content?: string; // Data URL for custom pixel content
 }
 
 export interface PixelCoordinate {
@@ -49,4 +51,4 @@ export interface LeaderboardEntry {
 
 export type GridMode = 'view' | 'select';
 
-export type CustomizationType = 'color' | 'text' | 'image';
+export type CustomizationType = 'color' | 'text' | 'image' | 'draw';

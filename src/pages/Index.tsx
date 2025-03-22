@@ -1,15 +1,20 @@
+
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import PixelGrid from '@/components/PixelGrid';
 import CustomizationPanel from '@/components/CustomizationPanel';
 import PurchaseModal from '@/components/PurchaseModal';
+import PixelEditor from '@/components/PixelEditor';
 import Leaderboard from '@/components/Leaderboard';
 import { PixelProvider, usePixels } from '@/context/PixelContext';
 import { Bitcoin } from 'lucide-react';
+import { toast } from 'sonner';
+import { savePixelContent } from '@/utils/api';
 
 const PixelGridApp: React.FC = () => {
-  const { gridMode, setGridMode, clearSelection } = usePixels();
+  const { gridMode, setGridMode, clearSelection, selectedPixels, selectionDimensions } = usePixels();
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showPixelEditor, setShowPixelEditor] = useState(false);
   const [nickname, setNickname] = useState('');
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
@@ -25,8 +30,25 @@ const PixelGridApp: React.FC = () => {
   };
 
   const handlePurchaseSuccess = () => {
-    setGridMode('view');
-    clearSelection();
+    setShowPixelEditor(true);
+  };
+
+  const handlePixelContentSave = async (content: string) => {
+    try {
+      // Create pixel IDs from selected pixels
+      const pixelIds = selectedPixels.map(p => `pixel-${p.x}-${p.y}`);
+      
+      // Save pixel content to context (this would be API call in production)
+      await savePixelContent(pixelIds, content);
+      
+      // Reset UI state
+      setGridMode('view');
+      clearSelection();
+      toast.success('Your pixel art has been saved permanently!');
+    } catch (error) {
+      console.error('Error saving pixel content:', error);
+      toast.error('Failed to save your pixel art. Please try again.');
+    }
   };
 
   return (
@@ -62,6 +84,12 @@ const PixelGridApp: React.FC = () => {
         text={text}
         image={image}
         onSuccess={handlePurchaseSuccess}
+      />
+      
+      <PixelEditor
+        open={showPixelEditor}
+        onOpenChange={setShowPixelEditor}
+        onSave={handlePixelContentSave}
       />
     </div>
   );

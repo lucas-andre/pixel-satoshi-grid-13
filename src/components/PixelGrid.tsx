@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { ZoomIn, ZoomOut, RefreshCw, Grab, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ const PixelGrid: React.FC = () => {
     isPixelOwned,
     isPixelSelected,
     getPixelColor,
+    getPixelContent,
     zoomIn,
     zoomOut,
     resetView,
@@ -33,6 +35,7 @@ const PixelGrid: React.FC = () => {
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [clickedPixel, setClickedPixel] = useState<{ x: number, y: number } | null>(null);
   const [pixelDetailsOpen, setPixelDetailsOpen] = useState(false);
+  const pixelContentImages = useRef<Map<string, HTMLImageElement>>(new Map());
 
   const screenToGrid = (screenX: number, screenY: number) => {
     const canvas = canvasRef.current;
@@ -68,14 +71,48 @@ const PixelGrid: React.FC = () => {
 
     const gridSize = 2;
 
+    // Draw colored pixels
     for (const pixel of pixels) {
       if (pixel.x >= visibleStartX && pixel.x < visibleEndX && 
           pixel.y >= visibleStartY && pixel.y < visibleEndY) {
-        ctx.fillStyle = pixel.color;
-        ctx.fillRect(pixel.x * gridSize, pixel.y * gridSize, gridSize, gridSize);
+        
+        // Check if this pixel has custom content
+        const content = getPixelContent(pixel.x, pixel.y);
+        
+        if (content) {
+          // If it has content, draw from the cached image if available
+          const pixelId = `pixel-${pixel.x}-${pixel.y}`;
+          
+          if (!pixelContentImages.current.has(pixelId)) {
+            // Create and cache the image
+            const img = new Image();
+            img.src = content;
+            pixelContentImages.current.set(pixelId, img);
+            
+            img.onload = () => {
+              // Redraw when image loads
+              drawGrid();
+            };
+          } else {
+            // Draw the cached image
+            const img = pixelContentImages.current.get(pixelId);
+            if (img && img.complete) {
+              ctx.drawImage(img, pixel.x * gridSize, pixel.y * gridSize, gridSize, gridSize);
+            } else {
+              // Fallback to color if image not loaded
+              ctx.fillStyle = pixel.color;
+              ctx.fillRect(pixel.x * gridSize, pixel.y * gridSize, gridSize, gridSize);
+            }
+          }
+        } else {
+          // No custom content, just draw the color
+          ctx.fillStyle = pixel.color;
+          ctx.fillRect(pixel.x * gridSize, pixel.y * gridSize, gridSize, gridSize);
+        }
       }
     }
 
+    // Draw selected pixels
     selectedPixels.forEach(({ x, y }) => {
       if (x >= visibleStartX && x < visibleEndX && 
           y >= visibleStartY && y < visibleEndY) {
@@ -84,6 +121,7 @@ const PixelGrid: React.FC = () => {
       }
     });
 
+    // Draw selection
     if (selection) {
       const startX = Math.min(selection.startX, selection.endX);
       const endX = Math.max(selection.startX, selection.endX);
@@ -108,6 +146,7 @@ const PixelGrid: React.FC = () => {
       );
     }
 
+    // Draw grid lines
     if (viewTransform.scale > 1) {
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.lineWidth = 0.2;
