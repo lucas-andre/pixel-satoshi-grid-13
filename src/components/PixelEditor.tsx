@@ -4,8 +4,21 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Upload, Pencil, Save, Eraser, Undo, X, ImageIcon } from 'lucide-react';
+import { 
+  Upload, 
+  Pencil, 
+  Save, 
+  Eraser, 
+  Undo, 
+  X, 
+  ImageIcon, 
+  Grid, 
+  Trash2, 
+  Download,
+  MousePointer 
+} from 'lucide-react';
 import { usePixels } from '@/context/PixelContext';
+import { Canvas, StaticCanvas, IEvent } from 'fabric';
 
 interface PixelEditorProps {
   open: boolean;
@@ -16,114 +29,247 @@ interface PixelEditorProps {
 const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave }) => {
   const { selectedPixels, selectionDimensions } = usePixels();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [activeTab, setActiveTab] = useState<'draw' | 'upload'>('draw');
-  const [isDrawing, setIsDrawing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'draw' | 'upload' | 'pixel'>('pixel');
+  const [activeTool, setActiveTool] = useState<'pencil' | 'eraser' | 'select'>('pencil');
   const [color, setColor] = useState('#000000');
-  const [brushSize, setBrushSize] = useState(2);
-  const [history, setHistory] = useState<ImageData[]>([]);
+  const [fabricCanvas, setFabricCanvas] = useState<Canvas | null>(null);
+  const [pixelSize, setPixelSize] = useState(10); // Size of each "pixel" in the pixel art
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [canvasHistory, setCanvasHistory] = useState<string[]>([]);
+  const [gridVisible, setGridVisible] = useState(true);
   
   // Initialize canvas
   useEffect(() => {
     if (!open || !canvasRef.current || !selectionDimensions) return;
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Clean up previous canvas instance if it exists
+    if (fabricCanvas) {
+      fabricCanvas.dispose();
+    }
     
-    canvas.width = selectionDimensions.width;
-    canvas.height = selectionDimensions.height;
+    const width = selectionDimensions.width * pixelSize;
+    const height = selectionDimensions.height * pixelSize;
     
+    const canvas = new Canvas(canvasRef.current, {
+      width,
+      height,
+      backgroundColor: '#FFFFFF',
+      selection: false, // Disable group selection
+      preserveObjectStacking: true,
+    });
+
     // Initialize with white background
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    canvas.renderAll();
     
     // Save initial state
-    const initialState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    setHistory([initialState]);
-  }, [open, selectionDimensions]);
+    const initialState = canvas.toDataURL({ format: 'png' });
+    setCanvasHistory([initialState]);
+    setFabricCanvas(canvas);
+    
+    drawGrid(canvas, width, height, pixelSize);
+    
+    return () => {
+      canvas.dispose();
+    };
+  }, [open, selectionDimensions, pixelSize]);
   
-  // Handle drawing
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
+  // Draw grid lines
+  const drawGrid = (canvas: Canvas, width: number, height: number, cellSize: number) => {
+    if (!gridVisible) return;
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Clear existing grid lines
+    const existingLines = canvas.getObjects().filter(obj => obj.data?.type === 'gridLine');
+    existingLines.forEach(line => canvas.remove(line));
     
-    setIsDrawing(true);
+    // Draw vertical lines
+    for (let i = 0; i <= width; i += cellSize) {
+      const line = new fabric.Line([i, 0, i, height], {
+        stroke: '#DDDDDD',
+        selectable: false,
+        evented: false,
+        data: { type: 'gridLine' }
+      });
+      canvas.add(line);
+    }
     
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Draw horizontal lines
+    for (let i = 0; i <= height; i += cellSize) {
+      const line = new fabric.Line([0, i, width, i], {
+        stroke: '#DDDDDD',
+        selectable: false,
+        evented: false,
+        data: { type: 'gridLine' }
+      });
+      canvas.add(line);
+    }
     
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = brushSize;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    canvas.renderAll();
   };
   
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !canvasRef.current) return;
+  // Toggle grid visibility
+  const toggleGrid = () => {
+    if (!fabricCanvas) return;
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    setGridVisible(!gridVisible);
     
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    if (!gridVisible) {
+      const width = selectionDimensions?.width ?? 0;
+      const height = selectionDimensions?.height ?? 0;
+      drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
+    } else {
+      const gridLines = fabricCanvas.getObjects().filter(obj => obj.data?.type === 'gridLine');
+      gridLines.forEach(line => fabricCanvas.remove(line));
+      fabricCanvas.renderAll();
+    }
   };
   
-  const endDrawing = () => {
-    if (!isDrawing || !canvasRef.current) return;
+  // Setup pixel drawing functionality
+  useEffect(() => {
+    if (!fabricCanvas || !selectionDimensions) return;
     
-    setIsDrawing(false);
+    // Remove all event listeners
+    fabricCanvas.off('mouse:down');
+    fabricCanvas.off('mouse:move');
+    fabricCanvas.off('mouse:up');
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (activeTab === 'pixel') {
+      // Pixel art mode
+      fabricCanvas.on('mouse:down', (options: IEvent<MouseEvent>) => {
+        if (!options.pointer) return;
+        
+        // Get x, y coordinates
+        const pointer = options.pointer;
+        drawPixel(Math.floor(pointer.x / pixelSize), Math.floor(pointer.y / pixelSize));
+      });
+      
+      fabricCanvas.on('mouse:move', (options: IEvent<MouseEvent>) => {
+        if (!options.pointer || !fabricCanvas.isDrawingMode) return;
+        
+        // Get x, y coordinates
+        const pointer = options.pointer;
+        drawPixel(Math.floor(pointer.x / pixelSize), Math.floor(pointer.y / pixelSize));
+      });
+      
+      fabricCanvas.on('mouse:up', () => {
+        // Save state for undo
+        if (fabricCanvas) {
+          const newState = fabricCanvas.toDataURL({ format: 'png' });
+          setCanvasHistory(prev => [...prev, newState]);
+        }
+        
+        // Turn off drawing mode
+        fabricCanvas.isDrawingMode = false;
+      });
+    } else if (activeTab === 'draw') {
+      // Free drawing mode
+      fabricCanvas.freeDrawingBrush.color = color;
+      fabricCanvas.freeDrawingBrush.width = activeTool === 'eraser' ? 10 : 2;
+      fabricCanvas.isDrawingMode = activeTool !== 'select';
+      
+      // Save state for undo when mouse is released
+      fabricCanvas.on('mouse:up', () => {
+        if (fabricCanvas) {
+          const newState = fabricCanvas.toDataURL({ format: 'png' });
+          setCanvasHistory(prev => [...prev, newState]);
+        }
+      });
+    }
+  }, [fabricCanvas, activeTab, activeTool, color, selectionDimensions, pixelSize]);
+  
+  // Draw a single pixel at the specified grid coordinates
+  const drawPixel = (gridX: number, gridY: number) => {
+    if (!fabricCanvas || !selectionDimensions) return;
     
-    ctx.closePath();
+    // Set drawing mode to make sure we capture mouse movement
+    fabricCanvas.isDrawingMode = true;
     
-    // Save to history
-    const newState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    setHistory(prev => [...prev, newState]);
+    // Check if we're within bounds
+    if (gridX < 0 || gridX >= selectionDimensions.width || 
+        gridY < 0 || gridY >= selectionDimensions.height) {
+      return;
+    }
+    
+    // Get the existing pixel at this location, if any
+    const existingPixel = fabricCanvas.getObjects().find(obj => 
+      obj.data?.type === 'pixel' && 
+      obj.data.x === gridX && 
+      obj.data.y === gridY
+    );
+    
+    // If we're erasing, remove the pixel if it exists
+    if (activeTool === 'eraser') {
+      if (existingPixel) {
+        fabricCanvas.remove(existingPixel);
+      }
+      return;
+    }
+    
+    // If a pixel already exists here, remove it so we can redraw
+    if (existingPixel) {
+      fabricCanvas.remove(existingPixel);
+    }
+    
+    // Create a new pixel (rectangle)
+    const rect = new fabric.Rect({
+      left: gridX * pixelSize,
+      top: gridY * pixelSize,
+      width: pixelSize,
+      height: pixelSize,
+      fill: color,
+      selectable: false,
+      evented: false,
+      data: { 
+        type: 'pixel',
+        x: gridX,
+        y: gridY
+      }
+    });
+    
+    // Add the pixel to the canvas
+    fabricCanvas.add(rect);
+    fabricCanvas.renderAll();
   };
   
   const handleUndo = () => {
-    if (history.length <= 1 || !canvasRef.current) return;
+    if (canvasHistory.length <= 1 || !fabricCanvas) return;
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    const newHistory = [...history];
+    const newHistory = [...canvasHistory];
     newHistory.pop();
     const lastState = newHistory[newHistory.length - 1];
     
-    ctx.putImageData(lastState, 0, 0);
-    setHistory(newHistory);
+    // Load the previous state back onto the canvas
+    fabric.Image.fromURL(lastState, (img) => {
+      fabricCanvas.clear();
+      fabricCanvas.add(img);
+      
+      // Redraw the grid if it was visible
+      if (gridVisible) {
+        const width = selectionDimensions?.width ?? 0;
+        const height = selectionDimensions?.height ?? 0;
+        drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
+      }
+      
+      fabricCanvas.renderAll();
+    });
+    
+    setCanvasHistory(newHistory);
   };
   
   const handleClear = () => {
-    if (!canvasRef.current) return;
+    if (!fabricCanvas) return;
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Remove all non-grid objects
+    const objects = fabricCanvas.getObjects().filter(obj => obj.data?.type !== 'gridLine');
+    objects.forEach(obj => fabricCanvas.remove(obj));
     
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Save to history
-    const newState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    setHistory(prev => [...prev, newState]);
+    // Set background back to white
+    fabricCanvas.setBackgroundColor('#FFFFFF', () => {
+      fabricCanvas.renderAll();
+      
+      // Save new state
+      const newState = fabricCanvas.toDataURL({ format: 'png' });
+      setCanvasHistory(prev => [...prev, newState]);
+    });
   };
   
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,50 +285,107 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     reader.onload = (event) => {
       setUploadedImage(event.target?.result as string);
       
-      if (canvasRef.current && event.target?.result) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+      if (fabricCanvas && event.target?.result) {
+        fabricCanvas.clear();
         
-        const img = new Image();
-        img.onload = () => {
-          // Clear canvas
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Load the image onto the canvas
+        fabric.Image.fromURL(event.target.result as string, (img) => {
+          // Scale image to fit canvas while maintaining aspect ratio
+          const canvasWidth = fabricCanvas.getWidth();
+          const canvasHeight = fabricCanvas.getHeight();
           
-          // Draw image fitted to canvas
-          const aspectRatio = img.width / img.height;
-          let drawWidth = canvas.width;
-          let drawHeight = canvas.width / aspectRatio;
+          const imgRatio = img.width! / img.height!;
+          const canvasRatio = canvasWidth / canvasHeight;
           
-          if (drawHeight > canvas.height) {
-            drawHeight = canvas.height;
-            drawWidth = canvas.height * aspectRatio;
+          let scaleFactor;
+          if (canvasRatio > imgRatio) {
+            // Canvas is wider than image
+            scaleFactor = canvasHeight / img.height!;
+          } else {
+            // Canvas is taller than image
+            scaleFactor = canvasWidth / img.width!;
           }
           
-          const x = (canvas.width - drawWidth) / 2;
-          const y = (canvas.height - drawHeight) / 2;
+          img.scale(scaleFactor);
           
-          ctx.drawImage(img, x, y, drawWidth, drawHeight);
+          // Center the image
+          img.set({
+            left: (canvasWidth - img.width! * scaleFactor) / 2,
+            top: (canvasHeight - img.height! * scaleFactor) / 2,
+            selectable: true,
+            centeredScaling: true
+          });
           
-          // Save to history
-          const newState = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          setHistory(prev => [...prev, newState]);
-        };
-        img.src = event.target.result as string;
+          fabricCanvas.add(img);
+          fabricCanvas.setActiveObject(img);
+          
+          // Redraw grid if needed
+          if (gridVisible) {
+            const width = selectionDimensions?.width ?? 0;
+            const height = selectionDimensions?.height ?? 0;
+            drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
+          }
+          
+          fabricCanvas.renderAll();
+          
+          // Save new state
+          const newState = fabricCanvas.toDataURL({ format: 'png' });
+          setCanvasHistory(prev => [...prev, newState]);
+        });
       }
     };
     reader.readAsDataURL(file);
   };
   
   const handleSave = () => {
-    if (!canvasRef.current) return;
+    if (!fabricCanvas) return;
     
-    const canvas = canvasRef.current;
-    const imageData = canvas.toDataURL('image/png');
+    // Temporarily hide grid for saving
+    const gridLines = fabricCanvas.getObjects().filter(obj => obj.data?.type === 'gridLine');
+    const gridWasVisible = gridLines.length > 0;
+    
+    if (gridWasVisible) {
+      gridLines.forEach(line => fabricCanvas.remove(line));
+    }
+    
+    // Get image data
+    const imageData = fabricCanvas.toDataURL({
+      format: 'png',
+      quality: 1
+    });
+    
+    // Restore grid if it was visible
+    if (gridWasVisible && selectionDimensions) {
+      drawGrid(
+        fabricCanvas, 
+        selectionDimensions.width * pixelSize, 
+        selectionDimensions.height * pixelSize, 
+        pixelSize
+      );
+    }
+    
+    // Save the image data
     onSave(imageData);
     onOpenChange(false);
     toast.success('Your pixel art has been saved!');
+  };
+  
+  const handleToolChange = (tool: 'pencil' | 'eraser' | 'select') => {
+    setActiveTool(tool);
+    
+    if (fabricCanvas) {
+      if (activeTab === 'draw') {
+        // For free drawing mode
+        fabricCanvas.isDrawingMode = tool !== 'select';
+        if (tool === 'eraser') {
+          fabricCanvas.freeDrawingBrush.color = '#FFFFFF';
+          fabricCanvas.freeDrawingBrush.width = 10;
+        } else {
+          fabricCanvas.freeDrawingBrush.color = color;
+          fabricCanvas.freeDrawingBrush.width = 2;
+        }
+      }
+    }
   };
   
   return (
@@ -192,11 +395,15 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
           <DialogTitle>Customize Your Pixels</DialogTitle>
         </DialogHeader>
         
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'draw' | 'upload')}>
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'draw' | 'upload' | 'pixel')}>
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="pixel" className="flex items-center justify-center">
+              <Grid className="h-4 w-4 mr-2" />
+              Pixel Art
+            </TabsTrigger>
             <TabsTrigger value="draw" className="flex items-center justify-center">
               <Pencil className="h-4 w-4 mr-2" />
-              Draw
+              Free Draw
             </TabsTrigger>
             <TabsTrigger value="upload" className="flex items-center justify-center">
               <ImageIcon className="h-4 w-4 mr-2" />
@@ -204,13 +411,13 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
             </TabsTrigger>
           </TabsList>
           
-          <TabsContent value="draw" className="space-y-4">
+          <TabsContent value="pixel" className="space-y-4">
             <div className="flex items-center space-x-4 mb-4">
               <div className="flex-1">
-                <label htmlFor="color-picker" className="block text-sm font-medium mb-1">Color</label>
+                <label htmlFor="pixel-color" className="block text-sm font-medium mb-1">Color</label>
                 <div className="flex items-center">
                   <input
-                    id="color-picker"
+                    id="pixel-color"
                     type="color"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
@@ -220,36 +427,112 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
               </div>
               
               <div className="flex-1">
-                <label htmlFor="brush-size" className="block text-sm font-medium mb-1">Brush Size</label>
-                <input
-                  id="brush-size"
-                  type="range"
-                  min="1"
-                  max="20"
-                  value={brushSize}
-                  onChange={(e) => setBrushSize(parseInt(e.target.value))}
-                  className="w-full"
-                />
+                <label className="block text-sm font-medium mb-1">Tool</label>
+                <div className="flex items-center space-x-2">
+                  <Button 
+                    variant={activeTool === 'pencil' ? 'default' : 'outline'} 
+                    size="sm" 
+                    onClick={() => handleToolChange('pencil')}
+                    title="Draw pixels"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant={activeTool === 'eraser' ? 'default' : 'outline'} 
+                    size="sm" 
+                    onClick={() => handleToolChange('eraser')}
+                    title="Erase pixels"
+                  >
+                    <Eraser className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
             
             <div className="flex items-center space-x-2 mb-4">
-              <Button variant="secondary" size="sm" onClick={handleUndo} disabled={history.length <= 1}>
+              <Button variant="secondary" size="sm" onClick={handleUndo} disabled={canvasHistory.length <= 1}>
                 <Undo className="h-4 w-4 mr-2" /> Undo
               </Button>
               <Button variant="secondary" size="sm" onClick={handleClear}>
-                <Eraser className="h-4 w-4 mr-2" /> Clear
+                <Trash2 className="h-4 w-4 mr-2" /> Clear
+              </Button>
+              <Button variant="outline" size="sm" onClick={toggleGrid}>
+                <Grid className="h-4 w-4 mr-2" /> {gridVisible ? 'Hide Grid' : 'Show Grid'}
               </Button>
             </div>
             
-            <div className="border rounded-lg overflow-hidden" style={{ maxWidth: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+            <div className="border rounded-lg overflow-hidden bg-white" style={{ maxWidth: '100%', maxHeight: '400px', overflowY: 'auto' }}>
               <canvas
                 ref={canvasRef}
                 className="touch-none"
-                onMouseDown={startDrawing}
-                onMouseMove={draw}
-                onMouseUp={endDrawing}
-                onMouseLeave={endDrawing}
+                style={{ background: '#FFFFFF' }}
+              />
+            </div>
+            
+            <div className="text-xs text-muted-foreground">
+              Tip: Click a cell to draw/erase individual pixels.
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="draw" className="space-y-4">
+            <div className="flex items-center space-x-4 mb-4">
+              <div className="flex-1">
+                <label htmlFor="draw-color" className="block text-sm font-medium mb-1">Color</label>
+                <div className="flex items-center">
+                  <input
+                    id="draw-color"
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="h-10 w-10 rounded cursor-pointer border-2 border-transparent focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1">Tool</label>
+                <div className="flex items-center space-x-2">
+                  <Button 
+                    variant={activeTool === 'pencil' ? 'default' : 'outline'} 
+                    size="sm" 
+                    onClick={() => handleToolChange('pencil')}
+                    title="Free draw"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant={activeTool === 'eraser' ? 'default' : 'outline'} 
+                    size="sm" 
+                    onClick={() => handleToolChange('eraser')}
+                    title="Eraser"
+                  >
+                    <Eraser className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant={activeTool === 'select' ? 'default' : 'outline'} 
+                    size="sm" 
+                    onClick={() => handleToolChange('select')}
+                    title="Selection tool"
+                  >
+                    <MousePointer className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2 mb-4">
+              <Button variant="secondary" size="sm" onClick={handleUndo} disabled={canvasHistory.length <= 1}>
+                <Undo className="h-4 w-4 mr-2" /> Undo
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleClear}>
+                <Trash2 className="h-4 w-4 mr-2" /> Clear
+              </Button>
+            </div>
+            
+            <div className="border rounded-lg overflow-hidden bg-white" style={{ maxWidth: '100%', maxHeight: '400px', overflowY: 'auto' }}>
+              <canvas
+                ref={canvasRef}
+                className="touch-none"
                 style={{ background: '#FFFFFF' }}
               />
             </div>
@@ -269,7 +552,15 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
                   variant="destructive"
                   size="icon"
                   className="absolute top-2 right-2 h-8 w-8 opacity-80"
-                  onClick={() => setUploadedImage(null)}
+                  onClick={() => {
+                    setUploadedImage(null);
+                    if (fabricCanvas) {
+                      fabricCanvas.clear();
+                      fabricCanvas.setBackgroundColor('#FFFFFF', () => {
+                        fabricCanvas.renderAll();
+                      });
+                    }
+                  }}
                 >
                   <X className="h-4 w-4" />
                 </Button>

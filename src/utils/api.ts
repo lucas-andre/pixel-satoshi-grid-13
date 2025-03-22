@@ -10,6 +10,7 @@ export const LIGHTNING_ADDRESS = "orfeu@lawallet.ar";
 // In-memory storage for development (would be replaced by a database in production)
 const pixelStorage: Map<string, Pixel> = new Map();
 const pixelContent: Map<string, string> = new Map();
+const purchaseStorage: Map<string, { pixels: string[], owner: string }> = new Map();
 
 export async function fetchPixels(): Promise<Pixel[]> {
   // In a real implementation, this would fetch from an API endpoint
