@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Bitcoin, Copy, Check, RefreshCw, XCircle } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { purchasePixels, confirmPayment } from '@/utils/api';
+import { purchasePixels, confirmPayment, LIGHTNING_ADDRESS } from '@/utils/api';
 import { usePixels } from '@/context/PixelContext';
 import { Separator } from '@/components/ui/separator';
 
@@ -175,9 +175,28 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
         {status === 'invoice' && (
           <div className="space-y-4">
             <div className="bg-muted/50 rounded-lg p-4">
-              <p className="text-center text-sm text-muted-foreground mb-4">
+              <p className="text-center text-sm text-muted-foreground mb-2">
                 Pay the Lightning invoice to claim your pixels
               </p>
+              
+              <div className="bg-muted/70 p-3 rounded-md font-mono text-xs flex items-center justify-center mb-3">
+                <span className="text-muted-foreground">{LIGHTNING_ADDRESS}</span>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6 ml-1"
+                  onClick={() => {
+                    navigator.clipboard.writeText(LIGHTNING_ADDRESS);
+                    toast({
+                      title: "Copied",
+                      description: "Lightning address copied to clipboard",
+                      duration: 3000,
+                    });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
               
               <div className="bg-white/20 p-3 rounded-md font-mono text-xs overflow-x-auto text-muted-foreground">
                 {invoice}

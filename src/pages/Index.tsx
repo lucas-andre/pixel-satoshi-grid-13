@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import PixelGrid from '@/components/PixelGrid';
@@ -6,7 +5,7 @@ import CustomizationPanel from '@/components/CustomizationPanel';
 import PurchaseModal from '@/components/PurchaseModal';
 import Leaderboard from '@/components/Leaderboard';
 import { PixelProvider, usePixels } from '@/context/PixelContext';
-import { bitcoin } from 'lucide-react';
+import { Bitcoin } from 'lucide-react';
 
 const PixelGridApp: React.FC = () => {
   const { gridMode, setGridMode, clearSelection } = usePixels();

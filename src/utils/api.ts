@@ -4,6 +4,9 @@ import { Pixel, PixelPurchase, LeaderboardEntry } from '@/types';
 // This is a placeholder API module that will be replaced with actual API calls
 // when we connect to the backend
 
+// Lightning address setting
+export const LIGHTNING_ADDRESS = "orfeu@lawallet.ar";
+
 export async function fetchPixels(): Promise<Pixel[]> {
   // In a real implementation, this would fetch from an API endpoint
   return new Promise((resolve) => {
@@ -19,6 +22,7 @@ export async function purchasePixels(purchase: PixelPurchase): Promise<{
   message?: string;
 }> {
   console.log('Purchase request:', purchase);
+  console.log('Using Lightning address:', LIGHTNING_ADDRESS);
   
   // In development, just simulate a successful purchase
   return new Promise((resolve) => {
