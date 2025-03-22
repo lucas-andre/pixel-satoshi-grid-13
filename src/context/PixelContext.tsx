@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Pixel, PixelSelection, GridMode, PixelCoordinate } from '@/types';
 import { fetchPixels } from '@/utils/api';

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import PixelGrid from '@/components/PixelGrid';
@@ -20,7 +19,6 @@ const PixelGridApp: React.FC = () => {
   const [text, setText] = useState('');
   const [image, setImage] = useState<string | undefined>(undefined);
 
-  // New function to handle Buy Pixels button click
   const handleBuyPixels = () => {
     setGridMode('select');
     toast.info("Select an area on the canvas");
@@ -41,15 +39,26 @@ const PixelGridApp: React.FC = () => {
 
   const handlePixelContentSave = async (content: string) => {
     try {
-      // Create pixel IDs from selected pixels
       const pixelIds = selectedPixels.map(p => `pixel-${p.x}-${p.y}`);
       
-      // Save pixel content to context (this would be API call in production)
       await savePixelContent(pixelIds, content);
       
-      // Reset UI state
+      const tempPixels = selectedPixels.map(p => ({
+        id: `pixel-${p.x}-${p.y}`,
+        x: p.x,
+        y: p.y,
+        color: selectedColor,
+        ownerId: 'current-user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        content: content
+      }));
+      
+      refreshPixels();
+      
       setGridMode('view');
       clearSelection();
+      setShowPixelEditor(false);
       toast.success('Your pixel art has been saved permanently!');
     } catch (error) {
       console.error('Error saving pixel content:', error);
@@ -80,7 +89,6 @@ const PixelGridApp: React.FC = () => {
             </div>
           )}
           
-          {/* Buy Pixels floating button in view mode */}
           {gridMode === 'view' && (
             <div className="absolute bottom-16 right-4">
               <button

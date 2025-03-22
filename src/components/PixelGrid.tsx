@@ -82,7 +82,7 @@ const PixelGrid: React.FC = () => {
           pixel.y >= visibleStartY && pixel.y < visibleEndY) {
         
         // Check if this pixel has custom content
-        const content = getPixelContent(pixel.x, pixel.y);
+        const content = pixel.content || getPixelContent(pixel.x, pixel.y);
         
         if (content) {
           // If it has content, draw from the cached image if available

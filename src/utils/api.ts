@@ -7,13 +7,14 @@ import { Pixel, PixelPurchase, LeaderboardEntry } from '@/types';
 // Lightning address setting
 export const LIGHTNING_ADDRESS = "orfeu@lawallet.ar";
 
+// In-memory storage for development (would be replaced by a database in production)
+const pixelStorage: Map<string, Pixel> = new Map();
+const pixelContent: Map<string, string> = new Map();
+
 export async function fetchPixels(): Promise<Pixel[]> {
   // In a real implementation, this would fetch from an API endpoint
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve([]);
-    }, 500);
-  });
+  // For now, return our in-memory pixels
+  return Promise.resolve(Array.from(pixelStorage.values()));
 }
 
 export async function purchasePixels(purchase: PixelPurchase): Promise<{ 
@@ -60,14 +61,31 @@ export async function savePixelContent(pixelIds: string[], content: string): Pro
 }> {
   console.log('Saving pixel content for pixels:', pixelIds);
   
+  // Store the content for each pixel ID
+  pixelIds.forEach(id => {
+    pixelContent.set(id, content);
+    
+    // Extract x,y coordinates from the pixel ID
+    const [_, x, y] = id.split('-').map(Number);
+    
+    // Create or update the pixel in our storage
+    const pixelId = `pixel-${x}-${y}`;
+    pixelStorage.set(pixelId, {
+      id: pixelId,
+      x: x,
+      y: y,
+      color: '#F7931A', // Default color
+      ownerId: 'current-user',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      content: content
+    });
+  });
+  
   // For development, simulate successful save
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        success: true,
-        message: 'Pixel content saved successfully'
-      });
-    }, 1000);
+  return Promise.resolve({
+    success: true,
+    message: 'Pixel content saved successfully'
   });
 }
 
@@ -97,7 +115,22 @@ export async function getPixelDetails(x: number, y: number): Promise<{
 }> {
   console.log(`Fetching details for pixel at (${x}, ${y})`);
   
-  // Mock pixel details
+  // Check if we have this pixel in our storage
+  const pixelId = `pixel-${x}-${y}`;
+  const pixel = pixelStorage.get(pixelId);
+  
+  if (pixel) {
+    return Promise.resolve({
+      pixel,
+      owner: {
+        nickname: 'You',
+        url: 'https://example.com',
+        totalPixels: Array.from(pixelStorage.values()).length,
+      }
+    });
+  }
+  
+  // Mock pixel details for non-stored pixels
   return new Promise((resolve) => {
     setTimeout(() => {
       if (Math.random() > 0.3) {
