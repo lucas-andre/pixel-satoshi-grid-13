@@ -18,7 +18,25 @@ import {
   MousePointer 
 } from 'lucide-react';
 import { usePixels } from '@/context/PixelContext';
-import { Canvas, StaticCanvas, TEvent, Line, Rect, Image as FabricImage } from 'fabric';
+import { 
+  Canvas, 
+  StaticCanvas, 
+  Line, 
+  Rect, 
+  Image as FabricImage, 
+  FabricObject,
+  TPointerEventInfo,
+  TPointerEvent
+} from 'fabric';
+
+// Define a custom type for objects with data property
+interface CustomFabricObject extends FabricObject {
+  customData?: {
+    type: string;
+    x?: number;
+    y?: number;
+  };
+}
 
 interface PixelEditorProps {
   open: boolean;
@@ -81,9 +99,11 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     if (!gridVisible) return;
     
     // Clear existing grid lines
-    const existingLines = canvas.getObjects().filter(obj => 
-      obj.data && obj.data.type === 'gridLine'
-    );
+    const existingLines = canvas.getObjects().filter(obj => {
+      const customObj = obj as CustomFabricObject;
+      return customObj.customData?.type === 'gridLine';
+    });
+    
     existingLines.forEach(line => canvas.remove(line));
     
     // Draw vertical lines
@@ -92,8 +112,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
         stroke: '#DDDDDD',
         selectable: false,
         evented: false,
-        data: { type: 'gridLine' }
       });
+      
+      // Add custom data to the line
+      (line as CustomFabricObject).customData = { type: 'gridLine' };
       canvas.add(line);
     }
     
@@ -103,8 +125,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
         stroke: '#DDDDDD',
         selectable: false,
         evented: false,
-        data: { type: 'gridLine' }
       });
+      
+      // Add custom data to the line
+      (line as CustomFabricObject).customData = { type: 'gridLine' };
       canvas.add(line);
     }
     
@@ -122,9 +146,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
       const height = selectionDimensions?.height ?? 0;
       drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
     } else {
-      const gridLines = fabricCanvas.getObjects().filter(obj => 
-        obj.data && obj.data.type === 'gridLine'
-      );
+      const gridLines = fabricCanvas.getObjects().filter(obj => {
+        const customObj = obj as CustomFabricObject;
+        return customObj.customData?.type === 'gridLine';
+      });
       gridLines.forEach(line => fabricCanvas.remove(line));
       fabricCanvas.renderAll();
     }
@@ -141,19 +166,19 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     
     if (activeTab === 'pixel') {
       // Pixel art mode
-      fabricCanvas.on('mouse:down', (options: TEvent<MouseEvent>) => {
-        if (!options.pointer) return;
+      fabricCanvas.on('mouse:down', (options: TPointerEventInfo<TPointerEvent>) => {
+        if (!options.absolutePointer) return;
         
         // Get x, y coordinates
-        const pointer = options.pointer;
+        const pointer = options.absolutePointer;
         drawPixel(Math.floor(pointer.x / pixelSize), Math.floor(pointer.y / pixelSize));
       });
       
-      fabricCanvas.on('mouse:move', (options: TEvent<MouseEvent>) => {
-        if (!options.pointer || !fabricCanvas.isDrawingMode) return;
+      fabricCanvas.on('mouse:move', (options: TPointerEventInfo<TPointerEvent>) => {
+        if (!options.absolutePointer || !fabricCanvas.isDrawingMode) return;
         
         // Get x, y coordinates
-        const pointer = options.pointer;
+        const pointer = options.absolutePointer;
         drawPixel(Math.floor(pointer.x / pixelSize), Math.floor(pointer.y / pixelSize));
       });
       
@@ -203,10 +228,12 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     }
     
     // Get the existing pixel at this location, if any
-    const existingPixel = fabricCanvas.getObjects().find(obj => 
-      obj.data && obj.data.type === 'pixel' && 
-      obj.data.x === gridX && obj.data.y === gridY
-    );
+    const existingPixel = fabricCanvas.getObjects().find(obj => {
+      const customObj = obj as CustomFabricObject;
+      return customObj.customData?.type === 'pixel' && 
+             customObj.customData?.x === gridX && 
+             customObj.customData?.y === gridY;
+    });
     
     // If we're erasing, remove the pixel if it exists
     if (activeTool === 'eraser') {
@@ -230,12 +257,14 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
       fill: color,
       selectable: false,
       evented: false,
-      data: { 
-        type: 'pixel',
-        x: gridX,
-        y: gridY
-      }
     });
+    
+    // Add custom data to the rectangle
+    (rect as CustomFabricObject).customData = { 
+      type: 'pixel',
+      x: gridX,
+      y: gridY
+    };
     
     // Add the pixel to the canvas
     fabricCanvas.add(rect);
@@ -251,17 +280,19 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     
     // Load the previous state back onto the canvas
     FabricImage.fromURL(lastState, (img) => {
-      fabricCanvas.clear();
-      fabricCanvas.add(img);
-      
-      // Redraw the grid if it was visible
-      if (gridVisible) {
-        const width = selectionDimensions?.width ?? 0;
-        const height = selectionDimensions?.height ?? 0;
-        drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
+      if (fabricCanvas) {
+        fabricCanvas.clear();
+        fabricCanvas.add(img);
+        
+        // Redraw the grid if it was visible
+        if (gridVisible) {
+          const width = selectionDimensions?.width ?? 0;
+          const height = selectionDimensions?.height ?? 0;
+          drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
+        }
+        
+        fabricCanvas.renderAll();
       }
-      
-      fabricCanvas.renderAll();
     });
     
     setCanvasHistory(newHistory);
@@ -271,9 +302,11 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     if (!fabricCanvas) return;
     
     // Remove all non-grid objects
-    const objects = fabricCanvas.getObjects().filter(obj => 
-      !obj.data || obj.data.type !== 'gridLine'
-    );
+    const objects = fabricCanvas.getObjects().filter(obj => {
+      const customObj = obj as CustomFabricObject;
+      return !customObj.customData || customObj.customData.type !== 'gridLine';
+    });
+    
     objects.forEach(obj => fabricCanvas.remove(obj));
     
     // Set background back to white
@@ -305,7 +338,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
         fabricCanvas.clear();
         
         // Load the image onto the canvas
-        FabricImage.fromURL(event.target.result as string, (img) => {
+        const imgUrl = event.target.result as string;
+        FabricImage.fromURL(imgUrl).then(img => {
+          if (!fabricCanvas) return;
+          
           // Scale image to fit canvas while maintaining aspect ratio
           const canvasWidth = fabricCanvas.getWidth();
           const canvasHeight = fabricCanvas.getHeight();
@@ -360,9 +396,11 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     if (!fabricCanvas) return;
     
     // Temporarily hide grid for saving
-    const gridLines = fabricCanvas.getObjects().filter(obj => 
-      obj.data && obj.data.type === 'gridLine'
-    );
+    const gridLines = fabricCanvas.getObjects().filter(obj => {
+      const customObj = obj as CustomFabricObject;
+      return customObj.customData?.type === 'gridLine';
+    });
+    
     const gridWasVisible = gridLines.length > 0;
     
     if (gridWasVisible) {
