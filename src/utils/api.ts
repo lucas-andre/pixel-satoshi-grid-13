@@ -74,7 +74,7 @@ export async function savePixelContent(pixelIds: string[], content: string): Pro
       id: pixelId,
       x: x,
       y: y,
-      color: '#F7931A', // Default color
+      color: '#F7931A', // Default Bitcoin orange color
       ownerId: 'current-user',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

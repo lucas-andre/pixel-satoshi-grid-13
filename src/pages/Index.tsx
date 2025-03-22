@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import PixelGrid from '@/components/PixelGrid';
@@ -11,13 +12,20 @@ import { toast } from 'sonner';
 import { savePixelContent } from '@/utils/api';
 
 const PixelGridApp: React.FC = () => {
-  const { gridMode, setGridMode, clearSelection, selectedPixels, selectionDimensions } = usePixels();
+  const { 
+    gridMode, 
+    setGridMode, 
+    clearSelection, 
+    selectedPixels, 
+    selectionDimensions, 
+    selectedColor,
+    refreshPixels 
+  } = usePixels();
+  
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showPixelEditor, setShowPixelEditor] = useState(false);
   const [nickname, setNickname] = useState('');
   const [url, setUrl] = useState('');
-  const [text, setText] = useState('');
-  const [image, setImage] = useState<string | undefined>(undefined);
 
   const handleBuyPixels = () => {
     setGridMode('select');
@@ -25,6 +33,10 @@ const PixelGridApp: React.FC = () => {
   };
 
   const handlePurchase = () => {
+    if (selectedPixels.length === 0) {
+      toast.error("Please select some pixels first");
+      return;
+    }
     setShowPurchaseModal(true);
   };
 
@@ -43,17 +55,6 @@ const PixelGridApp: React.FC = () => {
       
       await savePixelContent(pixelIds, content);
       
-      const tempPixels = selectedPixels.map(p => ({
-        id: `pixel-${p.x}-${p.y}`,
-        x: p.x,
-        y: p.y,
-        color: selectedColor,
-        ownerId: 'current-user',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        content: content
-      }));
-      
       refreshPixels();
       
       setGridMode('view');
@@ -68,7 +69,7 @@ const PixelGridApp: React.FC = () => {
 
   return (
     <div className="flex h-screen flex-col">
-      <Navbar onBuyPixels={handleBuyPixels} />
+      <Navbar onBuyPixelsClick={handleBuyPixels} />
       
       <main className="flex-1 pt-16 flex">
         <div className="flex-1 relative">
@@ -76,10 +77,36 @@ const PixelGridApp: React.FC = () => {
           
           {gridMode === 'select' && (
             <div className="absolute top-4 right-4 w-72">
-              <CustomizationPanel 
-                onPurchase={handlePurchase}
-                onCancel={handleCancel}
-              />
+              <div className="glass rounded-lg p-4 animate-slide-from-right">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold mb-1">Select Your Pixels</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedPixels.length} pixels selected ({selectedPixels.length} sats)
+                  </p>
+                  {selectionDimensions && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Dimensions: {selectionDimensions.width} × {selectionDimensions.height} pixels
+                    </p>
+                  )}
+                </div>
+                
+                <div className="flex justify-between mt-6">
+                  <button 
+                    className="px-4 py-2 border border-border rounded-md hover:bg-muted transition-colors"
+                    onClick={handleCancel}
+                  >
+                    Cancel
+                  </button>
+                  
+                  <button 
+                    className="bg-bitcoin hover:bg-bitcoin-light text-white px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={selectedPixels.length === 0}
+                    onClick={handlePurchase}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           
@@ -107,9 +134,9 @@ const PixelGridApp: React.FC = () => {
         open={showPurchaseModal}
         onOpenChange={setShowPurchaseModal}
         nickname={nickname}
+        setNickname={setNickname}
         url={url}
-        text={text}
-        image={image}
+        setUrl={setUrl}
         onSuccess={handlePurchaseSuccess}
       />
       

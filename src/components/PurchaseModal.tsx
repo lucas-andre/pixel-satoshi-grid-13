@@ -2,8 +2,10 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Bitcoin, Copy, Check, RefreshCw, XCircle } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { purchasePixels, confirmPayment, LIGHTNING_ADDRESS } from '@/utils/api';
 import { usePixels } from '@/context/PixelContext';
 import { Separator } from '@/components/ui/separator';
@@ -12,30 +14,35 @@ interface PurchaseModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   nickname: string;
-  url?: string;
-  text?: string;
-  image?: string;
+  setNickname: (nickname: string) => void;
+  url: string;
+  setUrl: (url: string) => void;
   onSuccess: () => void;
 }
 
-type PurchaseStatus = 'initial' | 'invoice' | 'confirming' | 'success' | 'error';
+type PurchaseStatus = 'user-info' | 'invoice' | 'confirming' | 'success' | 'error';
 
 const PurchaseModal: React.FC<PurchaseModalProps> = ({
   open,
   onOpenChange,
   nickname,
+  setNickname,
   url,
-  text,
-  image,
+  setUrl,
   onSuccess,
 }) => {
   const { selectedPixels, selectedColor, refreshPixels } = usePixels();
-  const [status, setStatus] = useState<PurchaseStatus>('initial');
+  const [status, setStatus] = useState<PurchaseStatus>('user-info');
   const [invoice, setInvoice] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string>('');
 
-  const handlePurchase = async () => {
+  const handleGenerateInvoice = async () => {
+    if (!nickname.trim()) {
+      toast.error("Please enter your name or nickname");
+      return;
+    }
+    
     setStatus('invoice');
     setError('');
 
@@ -45,8 +52,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
         color: selectedColor,
         nickname,
         url,
-        text,
-        image,
       });
 
       if (purchaseResponse.success && purchaseResponse.invoice) {
@@ -66,7 +71,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
     setError('');
 
     try {
-      // For development, we'll just simulate a successful payment
       const confirmationResponse = await confirmPayment(invoice);
 
       if (confirmationResponse.success) {
@@ -75,8 +79,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
         setTimeout(() => {
           onOpenChange(false);
           onSuccess();
-          toast({
-            title: "Purchase Successful!",
+          toast.success("Purchase Successful!", {
             description: `You now own ${selectedPixels.length} pixels on the grid.`,
             duration: 5000,
           });
@@ -94,17 +97,13 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
   const copyInvoice = () => {
     navigator.clipboard.writeText(invoice);
     setCopied(true);
-    toast({
-      title: "Copied",
-      description: "Invoice copied to clipboard",
-      duration: 3000,
-    });
+    toast.success("Invoice copied to clipboard");
     
     setTimeout(() => setCopied(false), 3000);
   };
 
   const resetModal = () => {
-    setStatus('initial');
+    setStatus('user-info');
     setInvoice('');
     setCopied(false);
     setError('');
@@ -120,7 +119,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
       <DialogContent className="glass sm:max-w-md animate-scale-in">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">
-            {status === 'initial' && 'Purchase Pixels'}
+            {status === 'user-info' && 'Confirm Your Purchase'}
             {status === 'invoice' && 'Pay with Lightning'}
             {status === 'confirming' && 'Confirming Payment'}
             {status === 'success' && 'Purchase Successful!'}
@@ -128,7 +127,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
           </DialogTitle>
         </DialogHeader>
 
-        {status === 'initial' && (
+        {status === 'user-info' && (
           <div className="space-y-4">
             <div className="bg-muted/50 rounded-lg p-4">
               <div className="flex justify-between items-center">
@@ -153,6 +152,31 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
               </div>
             </div>
             
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="nickname">Your Name/Nickname *</Label>
+                <Input
+                  id="nickname"
+                  placeholder="Satoshi"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="mt-2"
+                  required
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="url">Website URL (optional)</Label>
+                <Input
+                  id="url"
+                  placeholder="https://your-website.com"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+            </div>
+            
             <div className="flex justify-end mt-4">
               <Button 
                 variant="outline" 
@@ -163,7 +187,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
               </Button>
               <Button 
                 className="bg-bitcoin hover:bg-bitcoin-light text-white"
-                onClick={handlePurchase}
+                onClick={handleGenerateInvoice}
+                disabled={!nickname.trim()}
               >
                 <Bitcoin className="h-4 w-4 mr-2" />
                 Pay with Lightning
@@ -187,11 +212,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
                   className="h-6 w-6 ml-1"
                   onClick={() => {
                     navigator.clipboard.writeText(LIGHTNING_ADDRESS);
-                    toast({
-                      title: "Copied",
-                      description: "Lightning address copied to clipboard",
-                      duration: 3000,
-                    });
+                    toast.success("Lightning address copied to clipboard");
                   }}
                 >
                   <Copy className="h-3 w-3" />
@@ -264,7 +285,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
                 onSuccess();
               }}
             >
-              View My Pixels
+              Customize My Pixels
             </Button>
           </div>
         )}
@@ -279,7 +300,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({
             <div className="flex justify-center space-x-4">
               <Button 
                 variant="outline" 
-                onClick={() => setStatus('initial')}
+                onClick={() => setStatus('user-info')}
               >
                 Try Again
               </Button>
