@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -339,6 +338,8 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
         
         // Load the image onto the canvas
         const imgUrl = event.target.result as string;
+        
+        // Fixed: Use a proper promise-based approach with FabricImage.fromURL
         FabricImage.fromURL(imgUrl).then(img => {
           if (!fabricCanvas) return;
           
