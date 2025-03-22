@@ -18,7 +18,7 @@ import {
   MousePointer 
 } from 'lucide-react';
 import { usePixels } from '@/context/PixelContext';
-import { Canvas, StaticCanvas, IEvent } from 'fabric';
+import { Canvas, StaticCanvas, TEvent, Line, Rect, Image as FabricImage } from 'fabric';
 
 interface PixelEditorProps {
   open: boolean;
@@ -62,7 +62,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     canvas.renderAll();
     
     // Save initial state
-    const initialState = canvas.toDataURL({ format: 'png' });
+    const initialState = canvas.toDataURL({ 
+      format: 'png',
+      multiplier: 1
+    });
     setCanvasHistory([initialState]);
     setFabricCanvas(canvas);
     
@@ -78,12 +81,14 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     if (!gridVisible) return;
     
     // Clear existing grid lines
-    const existingLines = canvas.getObjects().filter(obj => obj.data?.type === 'gridLine');
+    const existingLines = canvas.getObjects().filter(obj => 
+      obj.data && obj.data.type === 'gridLine'
+    );
     existingLines.forEach(line => canvas.remove(line));
     
     // Draw vertical lines
     for (let i = 0; i <= width; i += cellSize) {
-      const line = new fabric.Line([i, 0, i, height], {
+      const line = new Line([i, 0, i, height], {
         stroke: '#DDDDDD',
         selectable: false,
         evented: false,
@@ -94,7 +99,7 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     
     // Draw horizontal lines
     for (let i = 0; i <= height; i += cellSize) {
-      const line = new fabric.Line([0, i, width, i], {
+      const line = new Line([0, i, width, i], {
         stroke: '#DDDDDD',
         selectable: false,
         evented: false,
@@ -117,7 +122,9 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
       const height = selectionDimensions?.height ?? 0;
       drawGrid(fabricCanvas, width * pixelSize, height * pixelSize, pixelSize);
     } else {
-      const gridLines = fabricCanvas.getObjects().filter(obj => obj.data?.type === 'gridLine');
+      const gridLines = fabricCanvas.getObjects().filter(obj => 
+        obj.data && obj.data.type === 'gridLine'
+      );
       gridLines.forEach(line => fabricCanvas.remove(line));
       fabricCanvas.renderAll();
     }
@@ -134,7 +141,7 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     
     if (activeTab === 'pixel') {
       // Pixel art mode
-      fabricCanvas.on('mouse:down', (options: IEvent<MouseEvent>) => {
+      fabricCanvas.on('mouse:down', (options: TEvent<MouseEvent>) => {
         if (!options.pointer) return;
         
         // Get x, y coordinates
@@ -142,7 +149,7 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
         drawPixel(Math.floor(pointer.x / pixelSize), Math.floor(pointer.y / pixelSize));
       });
       
-      fabricCanvas.on('mouse:move', (options: IEvent<MouseEvent>) => {
+      fabricCanvas.on('mouse:move', (options: TEvent<MouseEvent>) => {
         if (!options.pointer || !fabricCanvas.isDrawingMode) return;
         
         // Get x, y coordinates
@@ -153,7 +160,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
       fabricCanvas.on('mouse:up', () => {
         // Save state for undo
         if (fabricCanvas) {
-          const newState = fabricCanvas.toDataURL({ format: 'png' });
+          const newState = fabricCanvas.toDataURL({ 
+            format: 'png',
+            multiplier: 1
+          });
           setCanvasHistory(prev => [...prev, newState]);
         }
         
@@ -169,7 +179,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
       // Save state for undo when mouse is released
       fabricCanvas.on('mouse:up', () => {
         if (fabricCanvas) {
-          const newState = fabricCanvas.toDataURL({ format: 'png' });
+          const newState = fabricCanvas.toDataURL({ 
+            format: 'png',
+            multiplier: 1
+          });
           setCanvasHistory(prev => [...prev, newState]);
         }
       });
@@ -191,9 +204,8 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     
     // Get the existing pixel at this location, if any
     const existingPixel = fabricCanvas.getObjects().find(obj => 
-      obj.data?.type === 'pixel' && 
-      obj.data.x === gridX && 
-      obj.data.y === gridY
+      obj.data && obj.data.type === 'pixel' && 
+      obj.data.x === gridX && obj.data.y === gridY
     );
     
     // If we're erasing, remove the pixel if it exists
@@ -210,7 +222,7 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     }
     
     // Create a new pixel (rectangle)
-    const rect = new fabric.Rect({
+    const rect = new Rect({
       left: gridX * pixelSize,
       top: gridY * pixelSize,
       width: pixelSize,
@@ -238,7 +250,7 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     const lastState = newHistory[newHistory.length - 1];
     
     // Load the previous state back onto the canvas
-    fabric.Image.fromURL(lastState, (img) => {
+    FabricImage.fromURL(lastState, (img) => {
       fabricCanvas.clear();
       fabricCanvas.add(img);
       
@@ -259,17 +271,21 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     if (!fabricCanvas) return;
     
     // Remove all non-grid objects
-    const objects = fabricCanvas.getObjects().filter(obj => obj.data?.type !== 'gridLine');
+    const objects = fabricCanvas.getObjects().filter(obj => 
+      !obj.data || obj.data.type !== 'gridLine'
+    );
     objects.forEach(obj => fabricCanvas.remove(obj));
     
     // Set background back to white
-    fabricCanvas.setBackgroundColor('#FFFFFF', () => {
-      fabricCanvas.renderAll();
-      
-      // Save new state
-      const newState = fabricCanvas.toDataURL({ format: 'png' });
-      setCanvasHistory(prev => [...prev, newState]);
+    fabricCanvas.backgroundColor = '#FFFFFF';
+    fabricCanvas.renderAll();
+    
+    // Save new state
+    const newState = fabricCanvas.toDataURL({ 
+      format: 'png',
+      multiplier: 1
     });
+    setCanvasHistory(prev => [...prev, newState]);
   };
   
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -289,7 +305,7 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
         fabricCanvas.clear();
         
         // Load the image onto the canvas
-        fabric.Image.fromURL(event.target.result as string, (img) => {
+        FabricImage.fromURL(event.target.result as string, (img) => {
           // Scale image to fit canvas while maintaining aspect ratio
           const canvasWidth = fabricCanvas.getWidth();
           const canvasHeight = fabricCanvas.getHeight();
@@ -329,7 +345,10 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
           fabricCanvas.renderAll();
           
           // Save new state
-          const newState = fabricCanvas.toDataURL({ format: 'png' });
+          const newState = fabricCanvas.toDataURL({ 
+            format: 'png',
+            multiplier: 1
+          });
           setCanvasHistory(prev => [...prev, newState]);
         });
       }
@@ -341,7 +360,9 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     if (!fabricCanvas) return;
     
     // Temporarily hide grid for saving
-    const gridLines = fabricCanvas.getObjects().filter(obj => obj.data?.type === 'gridLine');
+    const gridLines = fabricCanvas.getObjects().filter(obj => 
+      obj.data && obj.data.type === 'gridLine'
+    );
     const gridWasVisible = gridLines.length > 0;
     
     if (gridWasVisible) {
@@ -351,7 +372,8 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
     // Get image data
     const imageData = fabricCanvas.toDataURL({
       format: 'png',
-      quality: 1
+      quality: 1,
+      multiplier: 1
     });
     
     // Restore grid if it was visible
@@ -556,9 +578,8 @@ const PixelEditor: React.FC<PixelEditorProps> = ({ open, onOpenChange, onSave })
                     setUploadedImage(null);
                     if (fabricCanvas) {
                       fabricCanvas.clear();
-                      fabricCanvas.setBackgroundColor('#FFFFFF', () => {
-                        fabricCanvas.renderAll();
-                      });
+                      fabricCanvas.backgroundColor = '#FFFFFF';
+                      fabricCanvas.renderAll();
                     }
                   }}
                 >
